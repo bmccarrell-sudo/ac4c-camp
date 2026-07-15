@@ -1450,16 +1450,33 @@ function stopCamera() {
   STATE.scanActive=false; scanLocked=false;
 }
 
-function scanFrame() {
-  if(!videoEl||!canvasEl||!scanStream) return; // bail if stopped
-  if(videoEl.videoWidth>0 && videoEl.videoHeight>0){ // video has actual frames
-    canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
-    const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
-    ctx.drawImage(videoEl,0,0);
-    if(!scanLocked&&typeof jsQR!=='undefined'){
+// Use native BarcodeDetector (faster, better on iPhone/Android) with jsQR fallback
+let barcodeDetector = null;
+try {
+  if('BarcodeDetector' in window) {
+    barcodeDetector = new BarcodeDetector({formats:['qr_code']});
+  }
+} catch(e){}
+
+async function scanFrame() {
+  if(!videoEl||!scanStream) return;
+  if(videoEl.videoWidth>0 && videoEl.videoHeight>0 && !scanLocked){
+    if(barcodeDetector){
+      // Native API — hardware accelerated, works great on iPhone/Android
+      try{
+        const codes = await barcodeDetector.detect(videoEl);
+        if(!scanLocked && codes.length>0 && codes[0].rawValue){
+          handleQRScan(codes[0].rawValue); return;
+        }
+      }catch(e){}
+    } else if(canvasEl && typeof jsQR!=='undefined'){
+      // jsQR fallback
+      canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
+      const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
+      ctx.drawImage(videoEl,0,0);
       const img=ctx.getImageData(0,0,canvasEl.width,canvasEl.height);
       const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-      if(code?.data) handleQRScan(code.data);
+      if(!scanLocked && code?.data){ handleQRScan(code.data); return; }
     }
   }
   scanRAF=requestAnimationFrame(scanFrame);
@@ -1484,7 +1501,7 @@ function handleQRScan(data) {
     const staff=STATE.staff.find(s=>s.id===id)||STATE.volunteers.find(v=>v.id===id);
     if(staff){ STATE.modal={type:'staffClock',staff}; render(); return; }
   }
-  STATE.scanError='QR not recognized. Use the manual list below.';
+  STATE.scanError=`QR scanned but not recognized (${data.slice(0,20)}). Make sure campers are added and synced.`;
   setTimeout(()=>{ STATE.scanError=null; scanLocked=false; render(); },2500);
   render();
 }
