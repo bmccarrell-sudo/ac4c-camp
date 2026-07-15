@@ -586,7 +586,11 @@ function buildScan() {
     overlay.appendChild(frame);
     vidWrap.appendChild(videoEl); vidWrap.appendChild(canvasEl); vidWrap.appendChild(overlay);
     camBox.appendChild(vidWrap);
-    camBox.appendChild(text('Staff badge · Camper QR · Parent code',{color:THEME.muted,fontSize:'14px',marginBottom:'14px'}));
+    const scanStatus = document.createElement('div');
+  scanStatus.id = 'scan-status';
+  scanStatus.style.cssText = 'font-size:13px;color:'+THEME.muted+';margin-bottom:14px;text-align:center;';
+  scanStatus.textContent = barcodeDetector ? '⚡ Using native scanner' : (typeof jsQR!=='undefined' ? '📷 Using jsQR scanner' : '⚠ Scanner loading...');
+  camBox.appendChild(scanStatus);
     camBox.appendChild(btn('Stop Camera', stopCamera, {color:THEME.red,full:true}));
     // Start camera after DOM insert
     setTimeout(startCamera, 80);
@@ -1433,14 +1437,16 @@ function startCameraUI() {
 async function startCamera() {
   if(scanStream) return; // already running
   try {
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}});
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     scanStream=stream;
     if(videoEl){
       videoEl.srcObject=stream;
-      videoEl.onloadedmetadata=()=>{ videoEl.play(); };
-      videoEl.onplaying=()=>{ scanFrame(); }; // start only when actually playing
+      videoEl.onloadedmetadata=()=>{ videoEl.play().catch(()=>{}); };
+      videoEl.onplaying=()=>{ if(!scanRAF) scanFrame(); };
+      // Belt-and-suspenders: also start after 1.5s in case onplaying doesn't fire (some iOS)
+      setTimeout(()=>{ if(scanStream&&videoEl&&!scanRAF) scanFrame(); },1500);
     }
-  } catch { STATE.scanError='Camera access denied. Use the manual list below.'; render(); }
+  } catch(e) { STATE.scanError='Camera access denied — '+e.message; render(); }
 }
 
 function stopCamera() {
@@ -1458,11 +1464,17 @@ try {
   }
 } catch(e){}
 
+let _frameTick=0;
 async function scanFrame() {
   if(!videoEl||!scanStream) return;
+  // Pulse status every 30 frames so user knows scanner is alive
+  _frameTick++;
+  if(_frameTick%30===0){
+    const el=document.getElementById('scan-status');
+    if(el) el.textContent=(_frameTick%60===0?'🔍':'👁')+' Scanning...';
+  }
   if(videoEl.videoWidth>0 && videoEl.videoHeight>0 && !scanLocked){
     if(barcodeDetector){
-      // Native API — hardware accelerated, works great on iPhone/Android
       try{
         const codes = await barcodeDetector.detect(videoEl);
         if(!scanLocked && codes.length>0 && codes[0].rawValue){
@@ -1470,7 +1482,6 @@ async function scanFrame() {
         }
       }catch(e){}
     } else if(canvasEl && typeof jsQR!=='undefined'){
-      // jsQR fallback
       canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
       const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
       ctx.drawImage(videoEl,0,0);
