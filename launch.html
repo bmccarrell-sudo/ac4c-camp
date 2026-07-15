@@ -744,7 +744,7 @@ function buildAdminCampers() {
 
   // Add camper form
   let formName='', formAge='', formGroup='', formParent='', formPhone='',
-      formEmergency='', formAllergies='', formMedical='', formBC=false, formAC=false;
+      formEmergency='', formEmergPhone='', formAllergies='', formMedical='', formBC=false, formAC=false;
 
   const form = card([],{padding:'18px',marginBottom:'18px'});
   form.appendChild(text('Add Camper',{fontSize:'11px',fontWeight:'700',color:THEME.greenDk,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'14px'}));
@@ -758,13 +758,14 @@ function buildAdminCampers() {
 
   const row2 = div({display:'flex',gap:'10px',marginBottom:'10px',flexWrap:'wrap'});
   const parentI = inp('Parent / Guardian name', formParent, v=>formParent=v, {style:{flex:'1 1 160px'}});
-  const phoneI = inp('Emergency phone', formPhone, v=>formPhone=v, {style:{flex:'1 1 130px'}});
+  const phoneI = inp('Parent phone', formPhone, v=>formPhone=v, {style:{flex:'1 1 130px'}});
   row2.appendChild(parentI); row2.appendChild(phoneI);
   form.appendChild(row2);
 
   const row3 = div({display:'flex',gap:'10px',marginBottom:'10px',flexWrap:'wrap'});
-  const emergI = inp('Emergency contact (if different)', formEmergency, v=>formEmergency=v, {style:{flex:'1 1 200px'}});
-  row3.appendChild(emergI);
+  const emergI     = inp('Emergency contact name', formEmergency, v=>formEmergency=v, {style:{flex:'1 1 180px'}});
+  const emergPhoneI = inp('Emergency contact phone', formEmergPhone, v=>formEmergPhone=v, {style:{flex:'1 1 140px'}});
+  row3.appendChild(emergI); row3.appendChild(emergPhoneI);
   form.appendChild(row3);
 
   const row4 = div({display:'flex',gap:'10px',marginBottom:'10px',flexWrap:'wrap'});
@@ -796,7 +797,7 @@ function buildAdminCampers() {
     const camper = {
       id:uid(), name, age:ageI.value.trim(), group:groupI.value.trim(),
       parentName:parentI.value.trim(), parentPhone:phoneI.value.trim(),
-      emergencyContact:emergI.value.trim(), allergies:allergyI.value.trim(),
+      emergencyContact:emergI.value.trim(), emergencyPhone:emergPhoneI.value.trim(), allergies:allergyI.value.trim(),
       medicalNotes:medI.value.trim(), beforecare:bcCb.checked, aftercare:acCb.checked,
       createdAt:new Date().toISOString(),
     };
@@ -837,6 +838,7 @@ function buildAdminCampers() {
     if(c.parentName) badges.appendChild(pill(`👤 ${c.parentName}`,THEME.grey,THEME.sub));
     if(c.parentPhone)badges.appendChild(pill(`📞 ${c.parentPhone}`,THEME.grey,THEME.sub));
     if(c.emergencyContact) badges.appendChild(pill(`🆘 ${c.emergencyContact}`,THEME.grey,THEME.sub));
+    if(c.emergencyPhone) badges.appendChild(pill(`📱 ${c.emergencyPhone}`,THEME.grey,THEME.sub));
     info.appendChild(badges);
 
     if(c.allergies) {
@@ -863,6 +865,17 @@ function buildAdminCampers() {
     actBtns.appendChild(text(`${sl.dot} ${sl.label}`,{fontSize:'11px',color:sl.color,fontWeight:'600',marginBottom:'2px'}));
     actBtns.appendChild(btn('🎒 QR',()=>{ STATE.modal={type:'camperQR',camper:c,qrMode:'camper'}; render(); },{small:true,ghost:true,textColor:THEME.sub}));
     actBtns.appendChild(btn('🚗 Parent',()=>{ STATE.modal={type:'camperQR',camper:c,qrMode:'parent'}; render(); },{small:true,style:{background:THEME.purple+'18',border:`1.5px solid ${THEME.purple}55`,color:THEME.purpleDk}}));
+    if(c.parentPhone){
+      const smsBtn = document.createElement('button');
+      smsBtn.textContent = '📲 Send QR';
+      Object.assign(smsBtn.style,{padding:'6px 10px',fontSize:'12px',fontWeight:'600',borderRadius:'8px',cursor:'pointer',fontFamily:'inherit',background:THEME.blue+'18',border:`1.5px solid ${THEME.blue}55`,color:THEME.blueDk,width:'100%',marginBottom:'2px'});
+      smsBtn.onclick = () => {
+        const qrLink = parentQR(c.id);
+        const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image — show it to staff at pickup.\n\n${qrLink}`;
+        window.open('sms:'+c.parentPhone+'?body='+encodeURIComponent(msg));
+      };
+      actBtns.appendChild(smsBtn);
+    }
     actBtns.appendChild(btn('Log',()=>openCamperModal(c,false),{small:true,color:THEME.green}));
     actBtns.appendChild(btn('✏️ Edit',()=>{ STATE.modal={type:'editCamper',camper:{...c}}; render(); },{small:true,ghost:true,textColor:THEME.lavDk,style:{borderColor:THEME.lavender}}));
     actBtns.appendChild(btn('✕',async()=>{
@@ -1514,14 +1527,15 @@ function buildEditCamperModal(m) {
   // Parent + Phone
   const r2 = div({display:'flex',gap:'10px',marginBottom:'10px',flexWrap:'wrap'});
   const parI = inp('Parent / Guardian name', c.parentName||'', v=>c.parentName=v, {style:{flex:'1 1 160px'}});
-  const phI  = inp('Emergency phone', c.parentPhone||'', v=>c.parentPhone=v, {style:{flex:'1 1 130px'}});
+  const phI  = inp('Parent phone', c.parentPhone||'', v=>c.parentPhone=v, {style:{flex:'1 1 130px'}});
   r2.appendChild(parI); r2.appendChild(phI);
   box.appendChild(r2);
 
   // Emergency contact
   const r3 = div({display:'flex',gap:'10px',marginBottom:'10px'});
-  const emI = inp('Emergency contact (if different)', c.emergencyContact||'', v=>c.emergencyContact=v, {style:{flex:'1'}});
-  r3.appendChild(emI);
+  const emI  = inp('Emergency contact name', c.emergencyContact||'', v=>c.emergencyContact=v, {style:{flex:'1 1 180px'}});
+  const emPhI = inp('Emergency contact phone', c.emergencyPhone||'', v=>c.emergencyPhone=v, {style:{flex:'1 1 140px'}});
+  r3.appendChild(emI); r3.appendChild(emPhI);
   box.appendChild(r3);
 
   // Allergies + Medical
