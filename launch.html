@@ -163,7 +163,7 @@ const camperStatus = (camperId, events) => {
   return ACTION_TO_STATUS[ev.action] ?? 'pending';
 };
 const qrUrl = (data, color='14172A') =>
-  `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(data)}&color=${color}&bgcolor=ffffff&margin=10`;
+  `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data)}&color=${color}&bgcolor=ffffff&margin=10`;
 const camperQR  = id => qrUrl('CAMP:'+id);
 const parentQR  = id => qrUrl('PARENT:'+id, '4E38B8');
 const staffQR   = id => qrUrl('STAFF:'+id);
@@ -818,7 +818,7 @@ function buildAdminCampers() {
   }
 
   const listDiv = div({display:'grid',gap:'10px'});
-  STATE.campers.forEach(c => {
+  [...STATE.campers].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c => {
     const status = camperStatus(c.id, STATE.events);
     const sl = STATUS_LABELS[status] || STATUS_LABELS.pending;
     const cCard = card([], {padding:'13px 16px', border:`1px solid ${c.allergies?THEME.alertBdr:THEME.border}`});
@@ -875,8 +875,9 @@ function buildAdminCampers() {
       Object.assign(smsBtn.style,{padding:'6px 10px',fontSize:'12px',fontWeight:'600',borderRadius:'8px',cursor:'pointer',fontFamily:'inherit',background:THEME.blue+'18',border:`1.5px solid ${THEME.blue}55`,color:THEME.blueDk,width:'100%',marginBottom:'2px'});
       smsBtn.onclick = () => {
         const qrLink = parentQR(c.id);
-        const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image — show it to staff at pickup.\n\n${qrLink}`;
-        window.open('sms:'+c.parentPhone+'?body='+encodeURIComponent(msg));
+        const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image and show it to staff at pickup.\n\n${qrLink}`;
+        const phone = (c.parentPhone||'').replace(/[^\d+]/g,''); // strip spaces/dashes
+        window.location.href = 'sms:'+phone+'&body='+encodeURIComponent(msg);
       };
       actBtns.appendChild(smsBtn);
     }
@@ -937,7 +938,7 @@ function buildAdminStaff() {
     return wrap;
   }
   const listDiv = div({display:'grid',gap:'10px'});
-  STATE.staff.forEach(s => {
+  [...STATE.staff].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s => {
     const c = card([],{padding:'13px 16px'});
     const row2 = div({display:'flex',alignItems:'center',gap:'14px'});
     const qrThumb = div({width:'54px',height:'54px',background:THEME.bg,borderRadius:'8px',
@@ -994,7 +995,7 @@ function buildAdminVolunteers() {
     return wrap;
   }
   const listDiv=div({display:'grid',gap:'10px'});
-  STATE.volunteers.forEach(v=>{
+  [...STATE.volunteers].sort((a,b)=>a.name.localeCompare(b.name)).forEach(v=>{
     const c=card([],{padding:'13px 16px'});
     const row=div({display:'flex',alignItems:'center',gap:'14px'});
     const qrThumb=div({width:'54px',height:'54px',background:THEME.bg,borderRadius:'8px',overflow:'hidden',flexShrink:'0',cursor:'pointer',border:`1px solid ${THEME.border}`});
