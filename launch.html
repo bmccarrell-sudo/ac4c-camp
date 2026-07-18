@@ -871,19 +871,25 @@ function buildAdminCampers() {
     actBtns.appendChild(btn('🚗 Parent',()=>{ STATE.modal={type:'camperQR',camper:c,qrMode:'parent'}; render(); },{small:true,style:{background:THEME.purple+'18',border:`1.5px solid ${THEME.purple}55`,color:THEME.purpleDk}}));
     if(c.parentPhone){
       const smsBtn = document.createElement('button');
-      smsBtn.textContent = '📲 Send QR';
+      smsBtn.textContent = '📤 Share QR';
       Object.assign(smsBtn.style,{padding:'6px 10px',fontSize:'12px',fontWeight:'600',borderRadius:'8px',cursor:'pointer',fontFamily:'inherit',background:THEME.blue+'18',border:`1.5px solid ${THEME.blue}55`,color:THEME.blueDk,width:'100%',marginBottom:'2px'});
-      smsBtn.onclick = () => {
+      smsBtn.onclick = async () => {
         const qrLink = parentQR(c.id);
         const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image and show it to staff at pickup.\n\n${qrLink}`;
-        const phone = (c.parentPhone||'').replace(/[^\d+]/g,'');
-        // Use <a> click — required for iOS PWA to open native Messages app
-        const a = document.createElement('a');
-        a.href = 'sms:'+phone+'&body='+encodeURIComponent(msg);
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(()=>document.body.removeChild(a), 200);
+        if(navigator.share){
+          // iOS/Android: opens native share sheet (Messages, WhatsApp, Email etc)
+          try {
+            await navigator.share({ title:`Parent QR — ${c.name}`, text:msg });
+          } catch(e) {
+            if(e.name!=='AbortError'){
+              // share failed — copy to clipboard as fallback
+              try { await navigator.clipboard.writeText(msg); showToast('Message copied to clipboard'); } catch(e2){}
+            }
+          }
+        } else {
+          // Desktop fallback — copy to clipboard
+          try { await navigator.clipboard.writeText(msg); showToast('Message copied to clipboard'); } catch(e){}
+        }
       };
       actBtns.appendChild(smsBtn);
     }
