@@ -876,8 +876,14 @@ function buildAdminCampers() {
       smsBtn.onclick = () => {
         const qrLink = parentQR(c.id);
         const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image and show it to staff at pickup.\n\n${qrLink}`;
-        const phone = (c.parentPhone||'').replace(/[^\d+]/g,''); // strip spaces/dashes
-        window.location.href = 'sms:'+phone+'&body='+encodeURIComponent(msg);
+        const phone = (c.parentPhone||'').replace(/[^\d+]/g,'');
+        // Use <a> click — required for iOS PWA to open native Messages app
+        const a = document.createElement('a');
+        a.href = 'sms:'+phone+'&body='+encodeURIComponent(msg);
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(()=>document.body.removeChild(a), 200);
       };
       actBtns.appendChild(smsBtn);
     }
