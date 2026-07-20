@@ -199,8 +199,13 @@ let STATE = {
   volUser: null,  // logged-in volunteer object
 };
 
-// Refs for camera
-let videoEl=null, canvasEl=null, scanRAF=null, scanStream=null, scanLocked=false;
+// Persistent camera elements — created once, never destroyed by render()
+const videoEl = document.createElement('video');
+videoEl.muted = true; videoEl.playsInline = true;
+Object.assign(videoEl.style, {width:'100%',display:'block',borderRadius:'12px'});
+const canvasEl = document.createElement('canvas');
+canvasEl.style.display = 'none';
+let scanRAF=null, scanStream=null, scanLocked=false;
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
 function render() {
@@ -576,11 +581,7 @@ function buildScan() {
   const camBox = card([],{padding:'20px',marginBottom:'14px',textAlign:'center'});
   if (STATE.scanActive) {
     const vidWrap = div({position:'relative',borderRadius:'12px',overflow:'hidden',maxWidth:'400px',margin:'0 auto 14px'});
-    videoEl = document.createElement('video');
-    videoEl.muted = true; videoEl.playsInline = true;
-    Object.assign(videoEl.style, {width:'100%',display:'block',borderRadius:'12px'});
-    canvasEl = document.createElement('canvas');
-    canvasEl.style.display = 'none';
+    // Re-use persistent video/canvas elements — never recreate them or the stream detaches
     const overlay = div({position:'absolute',inset:'0',pointerEvents:'none',display:'flex',alignItems:'center',justifyContent:'center'});
     const frame = div({width:'180px',height:'180px',borderRadius:'14px',border:`3px solid ${THEME.green}`,boxShadow:'0 0 0 9999px rgba(27,29,44,0.5)'});
     overlay.appendChild(frame);
@@ -1480,36 +1481,34 @@ function startCameraUI() {
 }
 
 async function startCamera() {
-  // If stream already exists (e.g. after a re-render), re-attach it to the
-  // newly-created videoEl — do NOT bail early or videoWidth stays 0 forever.
-  if(scanStream) {
-    if(videoEl && videoEl.srcObject !== scanStream) {
-      videoEl.srcObject = scanStream;
-      videoEl.onloadedmetadata = () => { videoEl.play().catch(()=>{}); };
-      videoEl.play().catch(()=>{});
-    }
-    return;
-  }
+  if(scanStream) return; // already running — videoEl is persistent so no re-attach needed
   try {
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
-    scanStream=stream;
-    if(videoEl){
-      videoEl.srcObject=stream;
-      videoEl.onloadedmetadata=()=>{ videoEl.play().catch(()=>{}); };
-    }
-    // Start scanning loop after 1s regardless of video events — reliable on all devices
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    scanStream = stream;
+    videoEl.srcObject = stream;
+    // Wait for metadata before playing, then start scan loop
+    videoEl.onloadedmetadata = () => {
+      videoEl.play().then(() => {
+        if(scanStream && !scanInterval) {
+          scanInterval = setInterval(scanFrame, 250);
+        }
+      }).catch(()=>{});
+    };
+    // Fallback: if onloadedmetadata never fires (some Android browsers), start anyway after 1.5s
     setTimeout(()=>{
       if(scanStream && !scanInterval){
-        scanInterval = setInterval(scanFrame, 250); // scan 4x per second
+        videoEl.play().catch(()=>{});
+        scanInterval = setInterval(scanFrame, 250);
       }
-    }, 1000);
+    }, 1500);
   } catch(e) { STATE.scanError='Camera access denied — '+e.message; render(); }
 }
 
 function stopCamera() {
   if(scanInterval){ clearInterval(scanInterval); scanInterval=null; }
   if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
-  scanRAF=null; videoEl=null; canvasEl=null;
+  videoEl.srcObject = null; // release the stream from the element
+  scanRAF=null;
   STATE.scanActive=false; scanLocked=false;
 }
 
