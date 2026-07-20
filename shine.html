@@ -1480,7 +1480,16 @@ function startCameraUI() {
 }
 
 async function startCamera() {
-  if(scanStream) return;
+  // If stream already exists (e.g. after a re-render), re-attach it to the
+  // newly-created videoEl — do NOT bail early or videoWidth stays 0 forever.
+  if(scanStream) {
+    if(videoEl && videoEl.srcObject !== scanStream) {
+      videoEl.srcObject = scanStream;
+      videoEl.onloadedmetadata = () => { videoEl.play().catch(()=>{}); };
+      videoEl.play().catch(()=>{});
+    }
+    return;
+  }
   try {
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     scanStream=stream;
