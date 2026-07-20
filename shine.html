@@ -10142,37 +10142,6 @@ else if(module.exports) window.jsQR = module.exports;
 <div id="root"></div>
 <script type="module">
 // ── CONFIG ──────────────────────────────────────────────────────────────────
-
-// ── DOM HELPERS ───────────────────────────────────────────────────────────────
-// These are used throughout the app for concise element creation
-function div(styles) {
-  const el = document.createElement('div');
-  if (styles) Object.assign(el.style, styles);
-  return el;
-}
-function text(content, styles) {
-  const el = document.createElement('span');
-  el.innerHTML = content;
-  if (styles) Object.assign(el.style, styles);
-  return el;
-}
-function inp(placeholder, value, onChange, opts={}) {
-  const el = document.createElement('input');
-  el.type = opts.type || 'text';
-  el.placeholder = placeholder;
-  el.value = value || '';
-  el.oninput = e => onChange(e.target.value);
-  if (opts.style) Object.assign(el.style, opts.style);
-  return el;
-}
-function pill(label, bg, color) {
-  const el = document.createElement('span');
-  el.textContent = label;
-  el.style.cssText = `display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:${bg}22;color:${color};margin:2px 2px 0 0`;
-  return el;
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 const CAMP_ID   = 'shine';
 const CAMP_NAME = 'Shine Squad';
 const CAMP_ICON = '⭐';
