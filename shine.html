@@ -10142,6 +10142,37 @@ else if(module.exports) window.jsQR = module.exports;
 <div id="root"></div>
 <script type="module">
 // ── CONFIG ──────────────────────────────────────────────────────────────────
+
+// ── DOM HELPERS ───────────────────────────────────────────────────────────────
+// These are used throughout the app for concise element creation
+function div(styles) {
+  const el = document.createElement('div');
+  if (styles) Object.assign(el.style, styles);
+  return el;
+}
+function text(content, styles) {
+  const el = document.createElement('span');
+  el.innerHTML = content;
+  if (styles) Object.assign(el.style, styles);
+  return el;
+}
+function inp(placeholder, value, onChange, opts={}) {
+  const el = document.createElement('input');
+  el.type = opts.type || 'text';
+  el.placeholder = placeholder;
+  el.value = value || '';
+  el.oninput = e => onChange(e.target.value);
+  if (opts.style) Object.assign(el.style, opts.style);
+  return el;
+}
+function pill(label, bg, color) {
+  const el = document.createElement('span');
+  el.textContent = label;
+  el.style.cssText = `display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:${bg}22;color:${color};margin:2px 2px 0 0`;
+  return el;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const CAMP_ID   = 'shine';
 const CAMP_NAME = 'Shine Squad';
 const CAMP_ICON = '⭐';
@@ -11819,16 +11850,24 @@ function buildShareQRModal(m) {
   const copyBtn = document.createElement('button');
   copyBtn.textContent = '📋 Copy Message';
   copyBtn.style.cssText = `width:100%;padding:13px;border-radius:12px;border:none;background:${THEME.green};color:#fff;font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px`;
-  copyBtn.onclick = async () => {
+  copyBtn.onclick = () => {
+    // Most reliable cross-platform copy: select textarea then execCommand
+    msgBox.style.display = 'block';
+    msgBox.select();
+    msgBox.setSelectionRange(0, 99999);
     try {
-      msgBox.select(); msgBox.setSelectionRange(0,99999);
-      if(navigator.clipboard){ await navigator.clipboard.writeText(msg); }
-      else { document.execCommand('copy'); }
-      copyBtn.textContent = '✅ Copied!';
-      setTimeout(()=>{ copyBtn.textContent='📋 Copy Message'; },2000);
-    } catch(e){
+      const ok = document.execCommand('copy');
+      if(ok){ copyBtn.textContent='✅ Copied!'; setTimeout(()=>{ copyBtn.textContent='📋 Copy Message'; },2500); return; }
+    } catch(e){}
+    // Modern API fallback
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(msg).then(()=>{
+        copyBtn.textContent='✅ Copied!';
+        setTimeout(()=>{ copyBtn.textContent='📋 Copy Message'; },2500);
+      }).catch(()=>{ msgBox.select(); copyBtn.textContent='👆 Tap text above → Copy'; });
+    } else {
       msgBox.select();
-      copyBtn.textContent = '👆 Select all then copy';
+      copyBtn.textContent = '👆 Tap text above → Copy';
     }
   };
   box.appendChild(copyBtn);
@@ -11837,9 +11876,9 @@ function buildShareQRModal(m) {
     const shareBtn = document.createElement('button');
     shareBtn.textContent = '📱 Share via Messages / WhatsApp';
     shareBtn.style.cssText = `width:100%;padding:13px;border-radius:12px;border:1.5px solid ${THEME.lavender};background:${THEME.lavender}18;color:${THEME.lavDk};font-family:inherit;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:8px`;
-    shareBtn.onclick = async () => {
-      try{ await navigator.share({title:`Parent QR — ${c.name}`,text:msg}); }
-      catch(e){ if(e.name!=='AbortError') copyBtn.click(); }
+    shareBtn.onclick = () => {
+      navigator.share({title:`Parent QR — ${c.name}`,text:msg})
+        .catch(e=>{ if(e.name!=='AbortError') copyBtn.click(); });
     };
     box.appendChild(shareBtn);
   }
