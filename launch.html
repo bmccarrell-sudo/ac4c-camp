@@ -10314,8 +10314,20 @@ let videoEl=null, canvasEl=null, scanRAF=null, scanStream=null, scanLocked=false
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
 function render() {
   const root = document.getElementById('root');
+  if(!root){ console.error('Root element missing!'); return; }
   root.innerHTML = '';
-  root.appendChild(buildApp());
+  try {
+    root.appendChild(buildApp());
+  } catch(e) {
+    root.innerHTML = `<div style="padding:20px;color:#dc2626;font-family:monospace;font-size:13px;white-space:pre-wrap;background:#fef2f2;border:2px solid #dc2626;border-radius:8px;margin:20px">
+<b>App Error — share this with your developer:</b>
+
+${e.message}
+
+${e.stack || ''}
+</div>`;
+    console.error('Render crashed:', e);
+  }
 }
 
 // ── DATA LOAD ─────────────────────────────────────────────────────────────────
