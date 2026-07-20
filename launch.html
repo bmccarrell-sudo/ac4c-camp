@@ -1023,6 +1023,55 @@ function buildAdminVolunteers() {
     row.appendChild(qrThumb); row.appendChild(info); row.appendChild(btns);
     c.appendChild(row); listDiv.appendChild(c);
   });
+  // Print Credentials button (above the volunteer list)
+  const printBar = document.createElement('div');
+  printBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:12px;';
+  const printBtn = document.createElement('button');
+  printBtn.textContent = '🖨 Print Credential Sheet';
+  printBtn.style.cssText = `padding:8px 16px;font-size:13px;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit;background:${THEME.lavender}18;border:1.5px solid ${THEME.lavender};color:${THEME.lavDk}`;
+  printBtn.onclick = () => {
+    const vols = [...STATE.volunteers].sort((a,b)=>a.name.localeCompare(b.name));
+    const rows = vols.map((v,i) => `
+      <tr style="background:${i%2===0?'#f8f5ff':'#fff'}">
+        <td style="padding:10px 12px;font-weight:700;color:#14172A">${v.name}</td>
+        <td style="padding:10px 12px;font-family:monospace;color:#5B2D8E">${v.username}</td>
+        <td style="padding:10px 12px;font-family:monospace;color:#5B2D8E">${v.passcode}</td>
+        <td style="padding:10px 12px;text-align:center">
+          <img src="${volQR(v.id)}" style="width:80px;height:80px;border:2px solid #ddd;border-radius:6px" />
+        </td>
+      </tr>`).join('');
+    const win = window.open('','_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>Volunteer Credentials — ${CAMP_LABEL}</title>
+    <style>
+      body{font-family:system-ui,sans-serif;padding:24px;color:#14172A;max-width:900px;margin:0 auto}
+      h1{font-size:22px;color:#5B2D8E;margin-bottom:4px}
+      h2{font-size:14px;color:#888;font-weight:400;margin-bottom:20px}
+      table{width:100%;border-collapse:collapse;border:1px solid #C8CEDB}
+      th{background:#5B2D8E;color:#fff;padding:10px 12px;text-align:left;font-size:13px}
+      td{border-bottom:1px solid #E8E4F8;font-size:13px;vertical-align:middle}
+      .notice{background:#FFFBEA;border:1px solid #FFD700;border-radius:8px;padding:12px 16px;font-size:12px;margin-bottom:20px;color:#555}
+      @media print{.no-print{display:none}body{padding:12px}}
+    </style></head><body>
+    <h1>${CAMP_LABEL} — Volunteer Login Credentials</h1>
+    <h2>A Catalyst For Change · Summer Camp 2025 · Confidential</h2>
+    <div class="notice no-print">⚠ This sheet contains login credentials. Print and distribute in person — do not share digitally.</div>
+    <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:10px 22px;background:#5B2D8E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button>
+    <table>
+      <thead><tr>
+        <th style="width:28%">Full Name</th>
+        <th style="width:22%">Username</th>
+        <th style="width:22%">Passcode</th>
+        <th style="width:28%">QR Badge</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top:20px;font-size:11px;color:#aaa">Generated ${new Date().toLocaleString()} · ${vols.length} volunteer(s) · ${CAMP_LABEL}</p>
+    </body></html>`);
+    win.document.close();
+  };
+  printBar.appendChild(printBtn);
+  wrap.insertBefore(printBar, listDiv);
+
   wrap.appendChild(listDiv);
   return wrap;
 }
@@ -1431,62 +1480,58 @@ function startCameraUI() {
 }
 
 async function startCamera() {
-  if(scanStream) return; // already running
+  if(scanStream) return;
   try {
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
     scanStream=stream;
     if(videoEl){
       videoEl.srcObject=stream;
       videoEl.onloadedmetadata=()=>{ videoEl.play().catch(()=>{}); };
-      videoEl.onplaying=()=>{ if(!scanRAF) scanFrame(); };
-      // Belt-and-suspenders: also start after 1.5s in case onplaying doesn't fire (some iOS)
-      setTimeout(()=>{ if(scanStream&&videoEl&&!scanRAF) scanFrame(); },1500);
     }
+    // Start scanning loop after 1s regardless of video events — reliable on all devices
+    setTimeout(()=>{
+      if(scanStream && !scanInterval){
+        scanInterval = setInterval(scanFrame, 250); // scan 4x per second
+      }
+    }, 1000);
   } catch(e) { STATE.scanError='Camera access denied — '+e.message; render(); }
 }
 
 function stopCamera() {
+  if(scanInterval){ clearInterval(scanInterval); scanInterval=null; }
   if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
-  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF=null; }
-  videoEl=null; canvasEl=null;
+  scanRAF=null; videoEl=null; canvasEl=null;
   STATE.scanActive=false; scanLocked=false;
 }
 
-// Use native BarcodeDetector (faster, better on iPhone/Android) with jsQR fallback
+// QR Scanner — interval-based, survives re-renders, works on iPhone & Android
+let scanInterval = null;
 let barcodeDetector = null;
-try {
-  if('BarcodeDetector' in window) {
-    barcodeDetector = new BarcodeDetector({formats:['qr_code']});
-  }
-} catch(e){}
+try { if('BarcodeDetector' in window) barcodeDetector = new BarcodeDetector({formats:['qr_code']}); } catch(e){}
 
-let _frameTick=0;
-async function scanFrame() {
-  if(!videoEl||!scanStream) return;
-  // Pulse status every 30 frames so user knows scanner is alive
-  _frameTick++;
-  if(_frameTick%30===0){
-    const el=document.getElementById('scan-status');
-    if(el) el.textContent=(_frameTick%60===0?'🔍':'👁')+' Scanning...';
-  }
-  if(videoEl.videoWidth>0 && videoEl.videoHeight>0 && !scanLocked){
-    if(barcodeDetector){
-      try{
-        const codes = await barcodeDetector.detect(videoEl);
-        if(!scanLocked && codes.length>0 && codes[0].rawValue){
-          handleQRScan(codes[0].rawValue); return;
-        }
-      }catch(e){}
-    } else if(canvasEl && typeof jsQR!=='undefined'){
+function scanFrame() {
+  if(!videoEl||!scanStream||scanLocked) return;
+  if(videoEl.videoWidth<1||videoEl.videoHeight<1) return;
+
+  // Update status indicator
+  const el=document.getElementById('scan-status');
+  if(el&&!el.dataset.tick) el.dataset.tick=0;
+  if(el){ el.dataset.tick=(+el.dataset.tick||0)+1; el.textContent=(+el.dataset.tick%2===0?'🔍':'👁')+' Scanning...'; }
+
+  if(barcodeDetector){
+    barcodeDetector.detect(videoEl).then(codes=>{
+      if(!scanLocked&&codes.length>0&&codes[0].rawValue) handleQRScan(codes[0].rawValue);
+    }).catch(()=>{});
+  } else if(canvasEl&&typeof jsQR!=='undefined'){
+    try{
       canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
       const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
       ctx.drawImage(videoEl,0,0);
       const img=ctx.getImageData(0,0,canvasEl.width,canvasEl.height);
       const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-      if(!scanLocked && code?.data){ handleQRScan(code.data); return; }
-    }
+      if(!scanLocked&&code?.data) handleQRScan(code.data);
+    }catch(e){}
   }
-  scanRAF=requestAnimationFrame(scanFrame);
 }
 
 function handleQRScan(data) {
