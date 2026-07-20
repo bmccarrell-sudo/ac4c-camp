@@ -11191,9 +11191,8 @@ function buildAdminVolunteers() {
     win.document.close();
   };
   printBar.appendChild(printBtn);
-  wrap.insertBefore(printBar, listDiv);
-
-  wrap.appendChild(listDiv);
+  wrap.appendChild(printBar);   // add print bar first
+  wrap.appendChild(listDiv);    // then the list
   return wrap;
 }
 
