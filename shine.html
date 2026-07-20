@@ -590,8 +590,14 @@ function buildScan() {
     const scanStatus = document.createElement('div');
   scanStatus.id = 'scan-status';
   scanStatus.style.cssText = 'font-size:13px;color:'+THEME.muted+';margin-bottom:14px;text-align:center;';
-  scanStatus.textContent = barcodeDetector ? '⚡ Using native scanner' : (typeof jsQR!=='undefined' ? '📷 Using jsQR scanner' : '⚠ Scanner loading...');
+  scanStatus.textContent = barcodeDetector ? '⚡ Using native scanner' : (window.jsQR ? '📷 Using jsQR scanner' : '⚠ Scanner loading...');
   camBox.appendChild(scanStatus);
+    // Debug panel
+    const dbg = document.createElement('div');
+    dbg.id = 'cam-debug';
+    dbg.style.cssText = 'font-size:11px;font-family:monospace;color:'+THEME.muted+';text-align:left;background:#111;padding:8px 10px;border-radius:8px;margin-bottom:10px;line-height:1.8;';
+    dbg.innerHTML = 'debug: waiting...';
+    camBox.appendChild(dbg);
     camBox.appendChild(btn('Stop Camera', stopCamera, {color:THEME.red,full:true}));
     // Start camera after DOM insert
     setTimeout(startCamera, 80);
@@ -1480,28 +1486,40 @@ function startCameraUI() {
   STATE.scanActive=true; STATE.scanError=null; STATE.lastScanResult=null; render();
 }
 
+function dbg(msg) {
+  const el = document.getElementById('cam-debug');
+  if(el) el.innerHTML += '<br>' + msg;
+  console.log('[CAM]', msg);
+}
 async function startCamera() {
-  if(scanStream) return; // already running — videoEl is persistent so no re-attach needed
+  dbg('startCamera called. scanStream='+(!!scanStream)+' srcObject='+(!!videoEl.srcObject));
+  if(scanStream) { dbg('already running, returning'); return; }
   try {
+    dbg('requesting getUserMedia...');
     const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    dbg('got stream, tracks='+stream.getTracks().length);
     scanStream = stream;
     videoEl.srcObject = stream;
-    // Wait for metadata before playing, then start scan loop
+    dbg('srcObject set. readyState='+videoEl.readyState+' videoWidth='+videoEl.videoWidth);
     videoEl.onloadedmetadata = () => {
+      dbg('onloadedmetadata fired! videoWidth='+videoEl.videoWidth);
       videoEl.play().then(() => {
+        dbg('play() resolved. starting interval');
         if(scanStream && !scanInterval) {
           scanInterval = setInterval(scanFrame, 250);
         }
-      }).catch(()=>{});
+      }).catch(e=>{ dbg('play() rejected: '+e.message); });
     };
     // Fallback: if onloadedmetadata never fires (some Android browsers), start anyway after 1.5s
     setTimeout(()=>{
+      dbg('fallback timeout. scanInterval='+(!!scanInterval)+' videoWidth='+videoEl.videoWidth+' readyState='+videoEl.readyState);
       if(scanStream && !scanInterval){
+        dbg('fallback: forcing play+interval');
         videoEl.play().catch(()=>{});
         scanInterval = setInterval(scanFrame, 250);
       }
     }, 1500);
-  } catch(e) { STATE.scanError='Camera access denied — '+e.message; render(); }
+  } catch(e) { dbg('ERROR: '+e.message); STATE.scanError='Camera access denied — '+e.message; render(); }
 }
 
 function stopCamera() {
@@ -1517,9 +1535,14 @@ let scanInterval = null;
 let barcodeDetector = null;
 try { if('BarcodeDetector' in window) barcodeDetector = new BarcodeDetector({formats:['qr_code']}); } catch(e){}
 
+let _frameCount = 0;
 function scanFrame() {
   if(!videoEl||!scanStream||scanLocked) return;
-  if(videoEl.videoWidth<1||videoEl.videoHeight<1) return;
+  if(videoEl.videoWidth<1||videoEl.videoHeight<1) {
+    _frameCount++;
+    if(_frameCount % 8 === 0) dbg('scanFrame: videoWidth='+videoEl.videoWidth+' readyState='+videoEl.readyState+' srcObject='+(!!videoEl.srcObject));
+    return;
+  }
 
   // Update status indicator
   const el=document.getElementById('scan-status');
@@ -1528,17 +1551,32 @@ function scanFrame() {
 
   if(barcodeDetector){
     barcodeDetector.detect(videoEl).then(codes=>{
+      const el2=document.getElementById('cam-debug');
+      if(el2&&codes.length>0) el2.innerHTML+='<br>BarcodeDetector hit: '+codes[0].rawValue;
+      if(el2&&codes.length===0&&Math.random()<0.02) el2.innerHTML+='<br>BarcodeDetector: no codes this frame';
       if(!scanLocked&&codes.length>0&&codes[0].rawValue) handleQRScan(codes[0].rawValue);
-    }).catch(()=>{});
-  } else if(canvasEl&&typeof jsQR!=='undefined'){
+    }).catch(e=>{
+      const el2=document.getElementById('cam-debug');
+      if(el2&&Math.random()<0.05) el2.innerHTML+='<br>BarcodeDetector error: '+e.message;
+    });
+  } else if(canvasEl&&window.jsQR){
     try{
       canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
       const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
       ctx.drawImage(videoEl,0,0);
       const img=ctx.getImageData(0,0,canvasEl.width,canvasEl.height);
-      const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+      const el2=document.getElementById('cam-debug');
+      if(el2&&Math.random()<0.02) el2.innerHTML+='<br>jsQR frame: '+img.width+'x'+img.height+' data[0]='+img.data[0];
+      const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+      if(el2&&code) el2.innerHTML+='<br>jsQR hit: '+code.data;
       if(!scanLocked&&code?.data) handleQRScan(code.data);
-    }catch(e){}
+    }catch(e){
+      const el2=document.getElementById('cam-debug');
+      if(el2) el2.innerHTML+='<br>jsQR error: '+e.message;
+    }
+  } else {
+    const el2=document.getElementById('cam-debug');
+    if(el2&&Math.random()<0.02) el2.innerHTML+='<br>WARNING: no detector available! barcodeDetector='+(!!barcodeDetector)+' jsQR type='+(typeof window.jsQR);
   }
 }
 

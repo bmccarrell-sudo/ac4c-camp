@@ -590,7 +590,7 @@ function buildScan() {
     const scanStatus = document.createElement('div');
   scanStatus.id = 'scan-status';
   scanStatus.style.cssText = 'font-size:13px;color:'+THEME.muted+';margin-bottom:14px;text-align:center;';
-  scanStatus.textContent = barcodeDetector ? '⚡ Using native scanner' : (typeof jsQR!=='undefined' ? '📷 Using jsQR scanner' : '⚠ Scanner loading...');
+  scanStatus.textContent = barcodeDetector ? '⚡ Using native scanner' : (window.jsQR ? '📷 Using jsQR scanner' : '⚠ Scanner loading...');
   camBox.appendChild(scanStatus);
     camBox.appendChild(btn('Stop Camera', stopCamera, {color:THEME.red,full:true}));
     // Start camera after DOM insert
@@ -1530,13 +1530,13 @@ function scanFrame() {
     barcodeDetector.detect(videoEl).then(codes=>{
       if(!scanLocked&&codes.length>0&&codes[0].rawValue) handleQRScan(codes[0].rawValue);
     }).catch(()=>{});
-  } else if(canvasEl&&typeof jsQR!=='undefined'){
+  } else if(canvasEl&&window.jsQR){
     try{
       canvasEl.width=videoEl.videoWidth; canvasEl.height=videoEl.videoHeight;
       const ctx=canvasEl.getContext('2d',{willReadFrequently:true});
       ctx.drawImage(videoEl,0,0);
       const img=ctx.getImageData(0,0,canvasEl.width,canvasEl.height);
-      const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+      const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
       if(!scanLocked&&code?.data) handleQRScan(code.data);
     }catch(e){}
   }
