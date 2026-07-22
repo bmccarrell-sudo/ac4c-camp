@@ -10161,7 +10161,10 @@ const KEYS = {
   staff:'shared-v2-staff',               // shared across both camps
   volunteers:'shared-v2-volunteers',     // shared across both camps
   staffEvents:'shared-v2-staffEvents',   // shared across both camps
+  appReload:  'shared-app-reload',           // force-refresh signal
 };
+
+const BUILD_TS = 1784694543691; // fixed at deploy time — used to detect force-refresh signal
 
 // ── SECTIONS campers can be checked into ───────────────────────────────────
 const SECTIONS = {
@@ -10370,6 +10373,14 @@ setInterval(async () => {
   const active    = document.activeElement;
   const userTyping = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
   // Fetch fresh data in background regardless
+  // Check for force-refresh signal from admin
+  const reloadTs = await kvGet(KEYS.appReload);
+  if (reloadTs && Number(reloadTs) > BUILD_TS) {
+    // Signal is newer than this build — reload to get latest version
+    window.location.reload(true);
+    return;
+  }
+
   const [campers, staff, volunteers, events, staffEvents] = await Promise.all([
     kvGet(KEYS.campers), kvGet(KEYS.staff), kvGet(KEYS.volunteers),
     kvGet(KEYS.events), kvGet(KEYS.staffEvents),
@@ -10848,6 +10859,10 @@ function buildAdmin() {
   headerRow.appendChild(text('🔓 Admin Access',{fontSize:'13px',color:THEME.greenDk,fontWeight:'600'}));
   const btnRow = div({display:'flex',gap:'8px',flexWrap:'wrap'});
   btnRow.appendChild(btn('🔑 Change PIN', ()=>{ STATE.confirmPin='changePin'; STATE.pinInput=''; STATE.pinError=''; STATE.pinStep='enter'; render(); }, {small:true,ghost:true,textColor:THEME.purpleDk,style:{borderColor:THEME.purple}}));
+  btnRow.appendChild(btn('🔄 Refresh All', async ()=>{
+    await kvPut(KEYS.appReload, Date.now());
+    showToast('All devices will refresh within 30 seconds ✓');
+  }, {small:true,ghost:true,textColor:THEME.blue,style:{borderColor:THEME.blue}}));
   btnRow.appendChild(btn('🔒 Lock', ()=>{ STATE.adminUnlocked=false; STATE.view='home'; render(); }, {small:true,ghost:true,textColor:THEME.red,style:{borderColor:THEME.redBdr}}));
   headerRow.appendChild(btnRow);
   wrap.appendChild(headerRow);
