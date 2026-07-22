@@ -10342,7 +10342,17 @@ async function loadData() {
   STATE.events      = events      || [];
   STATE.staffEvents = staffEvents || [];
   STATE.adminPin    = adminPin    || '3570';
-  STATE.loading     = false;
+  STATE.loading = false;
+  // Restore volunteer session if saved on this device
+  try {
+    const saved = localStorage.getItem('acfc-vol-session-'+CAMP_ID);
+    if (saved) {
+      const sess = JSON.parse(saved);
+      const vol = STATE.volunteers.find(v=>v.id===sess.id && v.username===sess.username);
+      if (vol) { STATE.volUnlocked=true; STATE.volUser=vol; STATE.view='vol'; }
+      else { localStorage.removeItem('acfc-vol-session-'+CAMP_ID); } // stale session
+    }
+  } catch(e) {}
   render();
 }
 
@@ -11162,7 +11172,7 @@ function buildAdminVolunteers() {
         </td>
       </tr>`).join('');
     const win = window.open('','_blank');
-    win.document.write(`<!DOCTYPE html><html><head><title>Volunteer Credentials — ${CAMP_LABEL}</title>
+    win.document.write(`<!DOCTYPE html><html><head><title>Volunteer Credentials — ${CAMP_NAME}</title>
     <style>
       body{font-family:system-ui,sans-serif;padding:24px;color:#14172A;max-width:900px;margin:0 auto}
       h1{font-size:22px;color:#5B2D8E;margin-bottom:4px}
@@ -11173,7 +11183,7 @@ function buildAdminVolunteers() {
       .notice{background:#FFFBEA;border:1px solid #FFD700;border-radius:8px;padding:12px 16px;font-size:12px;margin-bottom:20px;color:#555}
       @media print{.no-print{display:none}body{padding:12px}}
     </style></head><body>
-    <h1>${CAMP_LABEL} — Volunteer Login Credentials</h1>
+    <h1>${CAMP_NAME} — Volunteer Login Credentials</h1>
     <h2>A Catalyst For Change · Summer Camp 2025 · Confidential</h2>
     <div class="notice no-print">⚠ This sheet contains login credentials. Print and distribute in person — do not share digitally.</div>
     <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:10px 22px;background:#5B2D8E;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨 Print / Save as PDF</button>
@@ -11186,7 +11196,7 @@ function buildAdminVolunteers() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <p style="margin-top:20px;font-size:11px;color:#aaa">Generated ${new Date().toLocaleString()} · ${vols.length} volunteer(s) · ${CAMP_LABEL}</p>
+    <p style="margin-top:20px;font-size:11px;color:#aaa">Generated ${new Date().toLocaleString()} · ${vols.length} volunteer(s) · ${CAMP_NAME}</p>
     </body></html>`);
     win.document.close();
   };
@@ -11202,7 +11212,7 @@ function buildVol() {
   const vol = STATE.volUser;
   wrap.appendChild(text(`🙋 Logged in as <b>${vol.name}</b>`,
     {fontSize:'14px',color:THEME.greenDk,fontWeight:'600',marginBottom:'14px'}));
-  wrap.appendChild(btn('Log Out',()=>{ STATE.volUnlocked=false; STATE.volUser=null; STATE.view='home'; render(); },
+  wrap.appendChild(btn('🚪 Log Out',()=>{ STATE.volUnlocked=false; STATE.volUser=null; STATE.view='home'; localStorage.removeItem('acfc-vol-session-'+CAMP_ID); render(); },
     {ghost:true,small:true,textColor:THEME.red,style:{borderColor:THEME.redBdr,marginBottom:'18px'}}));
 
   // Simplified camper list for volunteers
@@ -11248,11 +11258,11 @@ function buildCamperActivityModal(m) {
   const sl = STATUS_LABELS[status] || STATUS_LABELS.pending;
   const nextActions = NEXT_ACTIONS[status] || [];
 
-  const backdrop = div({position:'fixed',inset:'0',background:'rgba(27,29,44,0.72)',display:'flex',alignItems:'flex-end',justifyContent:'center',zIndex:'300',padding:'0 14px 14px'});
+  const backdrop = div({position:'fixed',inset:'0',background:'rgba(27,29,44,0.72)',display:'flex',alignItems:'flex-start',justifyContent:'center',zIndex:'300',padding:'60px 14px 20px',overflowY:'auto'});
   backdrop.onclick = ()=>{ STATE.modal=null; render(); };
 
   const box = div({background:THEME.card,border:`1px solid ${THEME.border}`,borderRadius:'22px',
-    padding:'24px 22px',width:'100%',maxWidth:'440px',boxShadow:'0 -4px 30px rgba(27,29,44,0.18)'});
+    padding:'24px 22px',width:'100%',maxWidth:'440px',boxShadow:'0 4px 30px rgba(27,29,44,0.22)',maxHeight:'none'});
   box.onclick = e=>e.stopPropagation();
 
   // Header
@@ -11503,7 +11513,10 @@ function buildVolLoginModal() {
     const vol=STATE.volunteers.find(v=>v.username===STATE.volLoginUser&&v.passcode===STATE.volLoginPass);
     if(vol){
       STATE.volUnlocked=true; STATE.volUser=vol; STATE.volLoginError='';
-      STATE.volLoginUser=''; STATE.volLoginPass=''; STATE.modal=null; STATE.view='vol'; render();
+      STATE.volLoginUser=''; STATE.volLoginPass=''; STATE.modal=null; STATE.view='vol';
+      // Persist login on this device until explicit logout
+      localStorage.setItem('acfc-vol-session-'+CAMP_ID, JSON.stringify({id:vol.id,username:vol.username}));
+      render();
     } else {
       STATE.volLoginError='Incorrect username or passcode.'; render();
     }
@@ -11784,7 +11797,7 @@ function buildEditCamperModal(m) {
 function buildShareQRModal(m) {
   const c = m.camper;
   const qrLink = parentQR(c.id);
-  const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_LABEL} Summer Camp. Save this image and show it to staff at pickup.\n\n${qrLink}`;
+  const msg = `Hi ${c.parentName||'Parent'}! Here is the parent pickup QR code for ${c.name} at ${CAMP_NAME} Summer Camp. Save this image and show it to staff at pickup.\n\n${qrLink}`;
 
   const backdrop = document.createElement('div');
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(27,29,44,0.82);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px;box-sizing:border-box';
